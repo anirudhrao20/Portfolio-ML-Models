@@ -17,6 +17,6 @@ RUN git lfs pull
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Expose the port that the app will use
 EXPOSE 8000
-CMD ["uvicorn", "main:main", "--host", "0.0.0.0", "--port", "8000"]
+
+CMD ["uvicorn", "main:main", "--host", "0.0.0.0", "--port", "$PORT"]

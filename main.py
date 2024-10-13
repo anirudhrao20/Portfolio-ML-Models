@@ -6,15 +6,25 @@ import tensorflow as tf
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 import pickle
 import nltk
+from nltk.stem import WordNetLemmatizer
 
+# Suppress TensorFlow from trying to use GPUs since no GPUs are available
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+
+# Limit TensorFlow's memory growth to avoid unnecessary memory consumption
+gpus = tf.config.experimental.list_physical_devices('GPU')
+if gpus:
+    for gpu in gpus:
+        tf.config.experimental.set_memory_growth(gpu, True)
+
+# Download required NLTK data
 nltk.download('punkt')
 nltk.download('wordnet')
-from nltk.stem import WordNetLemmatizer
 
 # Initialize the FastAPI app
 app = FastAPI()
 
-# Initialize lemmatizer
+# Initialize the lemmatizer
 lemmatizer = WordNetLemmatizer()
 
 # Load the trained model
@@ -25,7 +35,7 @@ with open('fake_news_detector/tokenizer.pickle', 'rb') as handle:
     tokenizer = pickle.load(handle)
 
 
-# Preprocess function
+# Preprocess function for text input
 def preprocess(text):
     tokens = nltk.word_tokenize(text)
     tokens = [lemmatizer.lemmatize(token) for token in tokens if len(token) > 3]
