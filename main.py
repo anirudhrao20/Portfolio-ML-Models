@@ -20,6 +20,7 @@ if gpus:
 # Download required NLTK data
 nltk.download('punkt')
 nltk.download('wordnet')
+nltk.download('punkt_tab')
 
 # Initialize the FastAPI app
 app = FastAPI()
