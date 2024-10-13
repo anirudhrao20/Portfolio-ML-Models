@@ -1,6 +1,7 @@
 import os
 from fastapi import FastAPI, Depends, HTTPException, Request
 from fastapi.security.api_key import APIKeyHeader
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import tensorflow as tf
 from tensorflow.keras.preprocessing.sequence import pad_sequences
@@ -24,6 +25,15 @@ nltk.download('punkt_tab')
 
 # Initialize the FastAPI app
 app = FastAPI()
+
+# CORS settings: Allow requests from any origin (change this to specific origins in production)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # You can limit this to specific origins, e.g., ["https://your-frontend-url.com"]
+    allow_credentials=True,
+    allow_methods=["*"],  # Allow all methods (POST, GET, etc.)
+    allow_headers=["*"],  # Allow all headers, including custom ones like "X-API-Key"
+)
 
 # Initialize the lemmatizer
 lemmatizer = WordNetLemmatizer()
