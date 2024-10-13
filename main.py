@@ -76,21 +76,24 @@ async def get_api_key(api_key: str = Depends(api_key_header)):
 # POST endpoint to classify news, requiring the API key
 @app.post("/news/predict/")
 async def predict(request: NewsRequest, api_key: str = Depends(get_api_key)):
-    # Get the text from the request
-    text = request.text
+    try:
+        text = request.text
+        clean_text = preprocess(text)
+        sequences = tokenizer.texts_to_sequences([clean_text])
+        maxlen = 200
+        padded_sequence = pad_sequences(sequences, maxlen=maxlen, padding='post')
 
-    # Preprocess the text
-    clean_text = preprocess(text)
+        prediction = model.predict(padded_sequence)[0][0]
 
-    # Tokenize and pad the text
-    sequences = tokenizer.texts_to_sequences([clean_text])
-    maxlen = 200
-    padded_sequence = pad_sequences(sequences, maxlen=maxlen, padding='post')
+        if prediction > 0.5:
+            result = "Real News"
+            confidence = round(prediction * 100, 2)  # Confidence for Real News
+        else:
+            result = "Fake News"
+            confidence = round((1 - prediction) * 100, 2)  # Confidence for Fake News
 
-    # Make a prediction
-    prediction = model.predict(padded_sequence)[0][0]
+        # Ensure confidence and prediction align
+        return {"prediction": result, "confidence": confidence}
 
-    # Interpret the prediction
-    result = "Real News" if prediction > 0.5 else "Fake News"
-
-    return {"prediction": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
