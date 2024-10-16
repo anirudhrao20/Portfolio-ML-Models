@@ -1,4 +1,5 @@
 import os
+import logging
 from fastapi import FastAPI, Depends, HTTPException, Request
 from fastapi.security.api_key import APIKeyHeader
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,35 +9,36 @@ from tensorflow.keras.preprocessing.sequence import pad_sequences
 import pickle
 import nltk
 from nltk.stem import WordNetLemmatizer
+from nltk.corpus import stopwords
 
-# Suppress TensorFlow from trying to use GPUs since no GPUs are available
-os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-# Limit TensorFlow's memory growth to avoid unnecessary memory consumption
-gpus = tf.config.experimental.list_physical_devices('GPU')
-if gpus:
-    for gpu in gpus:
-        tf.config.experimental.set_memory_growth(gpu, True)
+# Suppress TensorFlow warnings
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 # Download required NLTK data
-nltk.download('punkt')
-nltk.download('wordnet')
-nltk.download('punkt_tab')
+nltk.download('punkt', quiet=True)
+nltk.download('punkt_tab', quiet=True)
+nltk.download('wordnet', quiet=True)
+nltk.download('stopwords', quiet=True)
 
 # Initialize the FastAPI app
 app = FastAPI()
 
-# CORS settings: Allow requests from any origin (change this to specific origins in production)
+# CORS settings
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # You can limit this to specific origins, e.g., ["https://your-frontend-url.com"]
+    allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["*"],  # Allow all methods (POST, GET, etc.)
-    allow_headers=["*"],  # Allow all headers, including custom ones like "X-API-Key"
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-# Initialize the lemmatizer
+# Initialize the lemmatizer and stopwords
 lemmatizer = WordNetLemmatizer()
+stop_words = set(stopwords.words('english'))
 
 # Load the trained model
 model = tf.keras.models.load_model('fake_news_detector/fake_news_detection_model.keras')
@@ -45,15 +47,19 @@ model = tf.keras.models.load_model('fake_news_detector/fake_news_detection_model
 with open('fake_news_detector/tokenizer.pickle', 'rb') as handle:
     tokenizer = pickle.load(handle)
 
+# Constants
+MAX_SEQUENCE_LENGTH = 500
+PREDICTION_THRESHOLD = 0.7
+
 
 # Preprocess function for text input
 def preprocess(text):
-    tokens = nltk.word_tokenize(text)
-    tokens = [lemmatizer.lemmatize(token) for token in tokens if len(token) > 3]
+    tokens = nltk.word_tokenize(text.lower())
+    tokens = [lemmatizer.lemmatize(token) for token in tokens if token not in stop_words and len(token) > 2]
     return ' '.join(tokens)
 
 
-# Define the request body using Pydantic's BaseModel
+# Define the request body
 class NewsRequest(BaseModel):
     text: str
 
@@ -73,27 +79,46 @@ async def get_api_key(api_key: str = Depends(api_key_header)):
         raise HTTPException(status_code=403, detail="Could not validate credentials")
 
 
-# POST endpoint to classify news, requiring the API key
 @app.post("/news/predict/")
 async def predict(request: NewsRequest, api_key: str = Depends(get_api_key)):
     try:
         text = request.text
         clean_text = preprocess(text)
         sequences = tokenizer.texts_to_sequences([clean_text])
-        maxlen = 200
-        padded_sequence = pad_sequences(sequences, maxlen=maxlen, padding='post')
+        padded_sequence = pad_sequences(sequences, maxlen=MAX_SEQUENCE_LENGTH, padding='post', truncating='post')
 
         prediction = model.predict(padded_sequence)[0][0]
 
-        if prediction > 0.5:
+        if prediction > PREDICTION_THRESHOLD:
             result = "Real News"
-            confidence = round(prediction * 100, 2)  # Confidence for Real News
-        else:
+            confidence = round(prediction * 100, 2)
+        elif prediction < (1 - PREDICTION_THRESHOLD):
             result = "Fake News"
-            confidence = round((1 - prediction) * 100, 2)  # Confidence for Fake News
+            confidence = round((1 - prediction) * 100, 2)
+        else:
+            result = "Uncertain"
+            confidence = round(abs(0.5 - prediction) * 200, 2)
 
-        # Ensure confidence and prediction align
-        return {"prediction": result, "confidence": confidence}
+        response = {
+            "prediction": result,
+            "confidence": confidence,
+            "raw_score": float(prediction)
+        }
+
+        logger.info(f"Prediction made: {response}")
+        return response
 
     except Exception as e:
+        logger.error(f"An error occurred: {str(e)}")
         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
+
+
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy"}
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(app, host="0.0.0.0", port=8000)
