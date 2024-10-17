@@ -13,7 +13,7 @@ COPY . /app
 # Download the model from the GitHub release
 RUN mkdir -p /app/fake_news_detector && \
     wget -O /app/fake_news_detector/fake_news_detection_model.keras \
-    https://github.com/anirudhrao20/Portfolio-ML-Models/releases/download/Model-Retrain-v1.0.1/fake_news_detection_model_1.0.1.keras
+    https://github.com/anirudhrao20/Portfolio-ML-Models/releases/download/Model-Retrain-v1.0.2/fake_news_detection_model_1.0.2.keras
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
